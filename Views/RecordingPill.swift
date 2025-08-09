@@ -10,7 +10,7 @@ import Combine
 
 struct RecordingPill: View {
     @ObservedObject var recordingState: RecordingState
-    @State private var barScales: [CGFloat] = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+    @State private var barScales: [CGFloat] = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
     @State private var animationTask: Task<Void, Never>? // Modern async task
     
     // Memory debugging
@@ -33,12 +33,12 @@ struct RecordingPill: View {
                 Spacer()
                 
                 HStack(spacing: 16) {
-                    // Animated bars (8 thinner bars instead of 5 dots)
+                    // Animated bars (16 thinner bars instead of 8 dots)
                     HStack(spacing: 2) {
-                        ForEach(0..<8) { index in
+                        ForEach(0..<16) { index in
                             RoundedRectangle(cornerRadius: 1)
                                 .fill(Color.white)
-                                .frame(width: 3, height: 12)
+                                .frame(width: 2, height: 12)
                                 .scaleEffect(x: 1, y: barScales[index])
                         }
                     }
@@ -140,7 +140,7 @@ struct RecordingPill: View {
         let level = CGFloat(recordingState.audioLevel)
         
         // Animate each bar with wave effect
-        for i in 0..<8 {
+        for i in 0..<16 {
             guard !Task.isCancelled else { break }
             
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -164,107 +164,12 @@ struct RecordingPill: View {
     @MainActor
     private func resetDotsToNormal() async {
         withAnimation(.easeInOut(duration: 0.2)) {
-            barScales = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+            barScales = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
         }
     }
 }
 
-// Recording state management (enhanced with memory safety)
-class RecordingState: ObservableObject {
-    @Published var isVisible = false
-    @Published var isRecording = false
-    @Published var isProcessing = false
-    @Published var audioLevel: Float = 0.0
-    @Published var statusText = "Ready"
-    
-    // Memory debugging
-    private let instanceId = UUID().uuidString.prefix(8)
-    private var isDeactivated = false
-    
-    init() {
-        print("📊 [STATE-\(instanceId)] RecordingState created")
-    }
-    
-    func startRecording() {
-        guard !isDeactivated else { 
-            print("📊 [STATE-\(instanceId)] Ignoring startRecording - deactivated")
-            return 
-        }
-        print("📊 [STATE-\(instanceId)] startRecording called")
-        isVisible = true
-        isRecording = true
-        statusText = "Listening..."
-    }
-    
-    func stopRecording() {
-        guard !isDeactivated else { 
-            print("📊 [STATE-\(instanceId)] Ignoring stopRecording - deactivated")
-            return 
-        }
-        print("📊 [STATE-\(instanceId)] stopRecording called")
-        isRecording = false
-        isProcessing = true
-        statusText = "Processing..."
-    }
-    
-    func complete() {
-        guard !isDeactivated else { 
-            print("📊 [STATE-\(instanceId)] Ignoring complete - deactivated")
-            return 
-        }
-        print("📊 [STATE-\(instanceId)] complete called")
-        statusText = "✓ Inserted"
-        
-        // CRITICAL: Update state immediately (no delays)
-        withAnimation {
-            self.isVisible = false
-            self.isProcessing = false
-            self.statusText = "Ready"
-        }
-        
-        print("📊 [STATE-\(instanceId)] ✅ Complete state updated immediately")
-    }
-    
-    func error(_ message: String) {
-        guard !isDeactivated else { 
-            print("📊 [STATE-\(instanceId)] Ignoring error - deactivated")
-            return 
-        }
-        print("📊 [STATE-\(instanceId)] error called: \(message)")
-        statusText = message
-        isRecording = false
-        isProcessing = false
-        
-        // CRITICAL: Update state immediately (no delays)
-        withAnimation {
-            self.isVisible = false
-            self.statusText = "Ready"
-        }
-        
-        print("📊 [STATE-\(instanceId)] ✅ Error state updated immediately")
-    }
-    
-    // CRITICAL: Deactivate to prevent crashes
-    func deactivate() {
-        print("📊 [STATE-\(instanceId)] deactivating RecordingState")
-        isDeactivated = true
-        
-        // CRITICAL: Update state immediately (no async operations)
-        DispatchQueue.main.async {
-            self.isVisible = false
-            self.isRecording = false
-            self.isProcessing = false
-            self.audioLevel = 0.0
-            self.statusText = "Ready"
-        }
-        
-        print("📊 [STATE-\(instanceId)] ✅ All operations completed immediately")
-    }
-    
-    deinit {
-        print("📊 [STATE-\(instanceId)] RecordingState deallocated")
-    }
-}
+
 
 // Preview
 struct RecordingPill_Previews: PreviewProvider {

@@ -20,6 +20,9 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     @Published var currentAudioLevel: Float = 0.0
     @Published var isTranscribing = false
     
+    // Callback for UI-triggered stop (latch mode)
+    var onStopRequested: (() -> Void)?
+    
     override init() {
         super.init()
         print("🟡 [SIMPLE-PILL] Initializing simple native pill")
@@ -131,8 +134,12 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         let pillView = SimplePillView(manager: self)
         
         pillWindow?.contentView = NSHostingView(rootView: pillView)
+        
+        // Enable mouse events for latch mode, disable for press-and-hold mode
+        pillWindow?.ignoresMouseEvents = !AppSettings.shared.useLatchMode
+        
         pillWindow?.orderFront(nil)
-        print("🟡 [SIMPLE-PILL] ✅ Pill shown (key press)")
+        print("🟡 [SIMPLE-PILL] ✅ Pill shown (key press) - mouse events: \(AppSettings.shared.useLatchMode ? "enabled" : "disabled")")
     }
     
     // SIMPLE: Hide pill (key release event)  
@@ -301,6 +308,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                         }
                     }
                 }
+                
             } else {
                 let overallEndTime = CFAbsoluteTimeGetCurrent()
                 let totalTime = overallEndTime - overallStartTime
@@ -454,6 +462,13 @@ struct SimplePillView: View {
     @State private var activeIndex: Int = 0
     @State private var waveTimer: Timer?
     
+    // Computed property for red square visibility
+    private var shouldShowRedSquare: Bool {
+        AppSettings.shared.useLatchMode && 
+        manager.recordingState.isRecording && 
+        !manager.isTranscribing
+    }
+    
     var body: some View {
         // Center the pill content within the window
         HStack {
@@ -508,8 +523,9 @@ struct SimplePillView: View {
                     }
                 } else {
                     // Show recording audio levels
-                    ForEach(0..<8) { i in
-                        let dotThreshold = Float(i) * 0.1 // More sensitive for 8 bars: 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7
+                    HStack(spacing: 2) {
+                        ForEach(0..<16) { i in
+                        let dotThreshold = Float(i) * 0.05 // More sensitive for 16 bars: 0.0, 0.05, 0.1, 0.15...
                         let isActive = manager.currentAudioLevel > dotThreshold
                         
                         // Much more dramatic expansion
@@ -518,10 +534,18 @@ struct SimplePillView: View {
                         let expansion = isActive ? (baseHeight + CGFloat(manager.currentAudioLevel) * (maxHeight - baseHeight)) : baseHeight
                         
                         Capsule()
-                            .fill(isActive ? Color.yellow : Color.white.opacity(0.6))
+                            .fill(isActive ? Color(red: 1.0, green: 1.0, blue: 0.0) : Color.white.opacity(0.6))
                             .frame(width: 2, height: expansion)
                             .animation(.easeOut(duration: 0.1), value: manager.currentAudioLevel)
+                        }
                     }
+                }
+                
+                // Red square indicator for latch mode (stop button)
+                if shouldShowRedSquare {
+                    Rectangle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
                 }
             }
             .padding(.horizontal, 16)
@@ -532,6 +556,13 @@ struct SimplePillView: View {
             )
             .frame(width: manager.isTranscribing ? 160 : 120, height: 40)
             .animation(.easeInOut(duration: 0.3), value: manager.isTranscribing)
+            .onTapGesture {
+                // Only handle taps in latch mode when recording (not transcribing)
+                if shouldShowRedSquare {
+                    print("🔴 [PILL-CLICK] Latch mode pill clicked - stopping recording")
+                    manager.onStopRequested?()
+                }
+            }
             
             Spacer()
         }

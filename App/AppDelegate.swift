@@ -37,6 +37,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("🚀 [APP] Creating HotkeyManager...")
         hotkeyManager = HotkeyManager()
         hotkeyManager?.setRecordingManager(recordingManager!)
+        
+        // Connect UI stop callback for latch mode
+        recordingManager?.onStopRequested = { [weak hotkeyManager] in
+            hotkeyManager?.stopRecordingFromUI()
+        }
+        
         print("🚀 [APP] ✅ Simple native pill managers initialized")
         
         // Set up menu

@@ -293,12 +293,47 @@ struct RecentView: View {
 
 struct HistoryRow: View {
     let entry: TranscriptionEntry
+    @State private var isHovered = false  // NEW: Hover state for copy icon
+    @State private var isIconHovered = false  // NEW: Specific icon hover state
+    @State private var isClicked = false  // NEW: Click animation state
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(entry.timeString)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // MODIFIED: Header with conditional copy icon
+            HStack {
+                Text(entry.timeString)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                // NEW: Visual copy indicator on hover
+                if isHovered {
+                    Image(systemName: "doc.on.clipboard")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                        .opacity(isIconHovered ? 1.0 : 0.6)  // Faint by default, full tone on icon hover
+                        .scaleEffect(isClicked ? 1.3 : 1.0)  // 30% expansion on click
+                        .animation(.easeInOut(duration: 0.1), value: isIconHovered)
+                        .animation(.easeInOut(duration: 0.15), value: isClicked)
+                        .onHover { hovering in
+                            isIconHovered = hovering
+                        }
+                        .onTapGesture {
+                            // Trigger pulsation animation
+                            isClicked = true
+                            
+                            // Copy to clipboard
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(entry.processedText, forType: .string)
+                            
+                            // Reset animation after brief delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                isClicked = false
+                            }
+                        }
+                }
+            }
             
             Text(entry.processedText)
                 .font(.body)
@@ -332,6 +367,9 @@ struct HistoryRow: View {
             // Copy to clipboard on tap
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(entry.processedText, forType: .string)
+        }
+        .onHover { hovering in             // NEW: Hover detection for copy icon
+            isHovered = hovering
         }
     }
 }

@@ -184,6 +184,34 @@ class HotkeyManager: ObservableObject {
         print("⌨️ [SYNC] ✅ Recording stopped - no waiting for cleanup")
     }
     
+    // PUBLIC: Stop recording from UI (latch mode pill click)
+    func stopRecordingFromUI() {
+        guard isRecording, let manager = recordingManager else {
+            print("⌨️ [⚠️] Cannot stop from UI - not recording or no manager")
+            return
+        }
+        
+        print("⌨️ [UI] Stopping recording from UI click...")
+        
+        // Reset latch state (critical for proper state management)
+        isRecordingInLatchMode = false
+        
+        // Update UI state immediately
+        DispatchQueue.main.async {
+            self.isRecording = false
+        }
+        
+        // Play notification sound (same as hotkey)
+        if AppSettings.shared.playFeedbackSounds {
+            playNotificationSound()
+        }
+        
+        // Stop recording (same logic as hotkey)
+        manager.stopRecording()
+        
+        print("⌨️ [UI] ✅ Recording stopped from UI - latch mode reset")
+    }
+    
     private func playClickSound() {
         // CRITICAL: Non-blocking sound with graceful error handling
         // If CLICK.mp3 is missing, don't break recording functionality
