@@ -51,6 +51,27 @@ struct FeatureFlags {
     static let enableCrashReporting = true
     static let enableAutoUpdate = true
     static let enableBetaFeatures = false
+    
+    // AGC Feature Control
+    static let enableAGC = true  // Master switch for AGC feature
+}
+
+// MARK: - AGC Configuration
+struct AGCConfig {
+    static let enabled = FeatureFlags.enableAGC
+    static let debugMode = false  // Set to true for detailed AGC logging
+    
+    // AGC Algorithm Parameters
+    static let targetLevel: Float = -20.0     // dB target level
+    static let attackTime: Float = 0.001      // 1ms attack time
+    static let releaseTime: Float = 0.1       // 100ms release time
+    static let silenceThreshold: Float = -60.0 // Below this = silence
+    static let maxGain: Float = 20.0          // Maximum gain boost (dB)
+    static let minGain: Float = -20.0         // Maximum gain reduction (dB)
+    
+    // Performance Limits
+    static let maxProcessingTime: TimeInterval = 0.1  // 100ms timeout
+    static let maxMemorySpikeMB: Int = 10             // 10MB temporary spike limit
 }
 
 // MARK: - Debug Settings
@@ -60,5 +81,9 @@ struct Debug {
     static let mockTranscription = "This is a test transcription for debugging purposes."
     static let logLevel = "verbose"
     static let showMemoryUsage = true
+    
+    // AGC Debug Settings
+    static let enableAGCDebug = true   // Detailed AGC logging in debug builds
+    static let skipAGCProcessing = false  // Skip AGC for debugging
 }
 #endif

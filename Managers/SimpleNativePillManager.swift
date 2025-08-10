@@ -12,6 +12,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     private let textInsertionManager = TextInsertionManager()
     private let whisperManager = WhisperManager()  // Add Whisper integration
     private let britishSpellingManager = BritishSpellingManager()  // Add British spelling as separate step
+    private let audioGainControl = AudioGainControl()  // Add AGC for consistent audio levels
     
     // SIMPLE: Just one window for the pill
     private var pillWindow: NSWindow?
@@ -221,13 +222,33 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                 
                 // Show processing status
                 DispatchQueue.main.async {
+                    self.recordingState.statusText = "Enhancing audio..."
+                }
+                
+                // AGC PROCESSING: Apply Automatic Gain Control for consistent levels
+                var finalURL = url  // Default to original URL
+                var enhancedURL: URL? = nil
+                
+                do {
+                    print("🟡 [SIMPLE-PILL] 🎚️ Applying AGC for consistent audio levels...")
+                    enhancedURL = try audioGainControl.processAudioFile(url)
+                    finalURL = enhancedURL!  // Use enhanced audio for transcription
+                    print("🟡 [SIMPLE-PILL] ✅ AGC processing complete")
+                } catch {
+                    print("🟡 [SIMPLE-PILL] ⚠️ AGC processing failed: \(error.localizedDescription)")
+                    print("🟡 [SIMPLE-PILL] 🔄 Falling back to original audio")
+                    // Continue with original audio - AGC failure is not fatal
+                }
+                
+                // Update processing status
+                DispatchQueue.main.async {
                     self.recordingState.statusText = "Transcribing..."
                 }
                 
-                // WHISPERKIT: Use async transcription for best performance
+                // WHISPERKIT: Use async transcription for best performance (with enhanced audio)
                 Task {
                     print("🟡 [SIMPLE-PILL] 📝 TRACING: Starting transcription with WhisperKit...")
-                    let transcribedText = await whisperManager.transcribe(audioURL: url)
+                    let transcribedText = await whisperManager.transcribe(audioURL: finalURL)
                     print("🟡 [SIMPLE-PILL] 📝 TRACING: WhisperKit transcription complete: \"\(transcribedText.prefix(50))...\"")
                     
                     // BRITISH SPELLING: Convert to British spelling as separate step (not replacing tone logic)
@@ -236,8 +257,13 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                     let britishText = britishSpellingManager.convertToBritishSpelling(transcribedText)
                     print("🟡 [SIMPLE-PILL] 📝 TRACING: British spelling conversion complete: \"\(britishText.prefix(50))...\"")
                     
-                    // Clean up file AFTER transcription is complete
+                    // Clean up files AFTER transcription is complete
                     try? FileManager.default.removeItem(at: url)
+                    
+                    // Clean up enhanced audio file if it was created
+                    if let enhancedURL = enhancedURL {
+                        AudioGainControl.cleanupEnhancedAudio(enhancedURL)
+                    }
                     
                     // Update UI on main thread
                     DispatchQueue.main.async {
@@ -340,6 +366,8 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                 
                 self.recordingState.error("File processing failed")
             }
+            // Clean up original file on error
+            try? FileManager.default.removeItem(at: url)
         }
         
         audioRecorder?.delegate = nil  // Clear delegate
