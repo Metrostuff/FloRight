@@ -169,7 +169,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         // IMPROVED: More robust audio settings for macOS
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: 44100.0,
+            AVSampleRateKey: 16000.0,
             AVNumberOfChannelsKey: 1,
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsBigEndianKey: false,
