@@ -27,6 +27,10 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     private var audioLevelTimer: Timer?
     private var recordingStartTime: Date?  // NEW: Track when recording started
     private var feedbackTimer: Timer?  // NEW: Timer for feedback display duration
+    
+    // Multi-monitor support
+    private var lockedScreen: NSScreen?
+    private var screenChangeObserver: NSObjectProtocol?
     @Published var currentAudioLevel: Float = 0.0
     @Published var isTranscribing = false
     
@@ -40,10 +44,10 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     }
     
     // MARK: - Simple Pill Setup
-    private func setupSimplePill() {
+    private func setupSimplePill(on screen: NSScreen? = nil) {
         // Keep window ready but hidden - will create view dynamically
-        guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.frame
+        guard let targetScreen = screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let screenFrame = targetScreen.frame
         
         // Use wider window to accommodate largest pill size (160px when transcribing)
         let windowWidth: CGFloat = 180
@@ -70,6 +74,83 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         print("🟡 [SIMPLE-PILL] ✅ Simple pill setup complete")
     }
     
+    // MARK: - Multi-Monitor Screen Detection
+    
+    private func getTargetScreen() -> NSScreen {
+        let detectionMethod = AppSettings.shared.screenDetectionMethod
+        
+        // Safe fallback screen - there should always be at least one screen
+        let fallbackScreen = NSScreen.main ?? NSScreen.screens.first!
+        
+        switch detectionMethod {
+        case "cursor":
+            return getCursorScreen() ?? fallbackScreen
+        case "main":
+            return fallbackScreen
+        default: // "automatic"
+            // Priority-based detection
+            if let focusedScreen = getFocusedWindowScreen() {
+                return focusedScreen
+            }
+            return getCursorScreen() ?? fallbackScreen
+        }
+    }
+    
+    private func getCursorScreen() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return NSScreen.screens.first { screen in
+            screen.frame.contains(mouseLocation)
+        }
+    }
+    
+    private func getFocusedWindowScreen() -> NSScreen? {
+        guard PermissionManager.shared.isAccessibilityAuthorized() else {
+            return nil
+        }
+        
+        // This is a simplified implementation - in a full implementation,
+        // we would use Accessibility APIs to get the actual focused window
+        // For now, we'll fall back to cursor position
+        return nil
+    }
+    
+    private func repositionPillIfNeeded(to screen: NSScreen) {
+        guard let window = pillWindow else { return }
+        
+        // Use same coordinate system as original setupSimplePill
+        let screenFrame = screen.frame
+        let windowSize = window.frame.size
+        let centeredX = (screenFrame.width - windowSize.width) / 2 + screenFrame.minX
+        let pillY: CGFloat = screenFrame.minY + 75  // Positioned so bottom of FloRight pill aligns with middle of Whisper Flow pill
+        
+        let newOrigin = NSPoint(x: centeredX, y: pillY)
+        
+        // Validate position is within screen bounds
+        if screen.frame.contains(NSRect(origin: newOrigin, size: windowSize)) {
+            window.setFrameOrigin(newOrigin)
+            print("🖥️ [MULTI-MONITOR] Pill repositioned to screen: \(screen.localizedName)")
+        } else {
+            print("🖥️ [MULTI-MONITOR] ⚠️ Invalid position calculated, keeping current position")
+        }
+    }
+    
+    private func setupScreenChangeNotification() {
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            if let lockedScreen = self?.lockedScreen,
+               !NSScreen.screens.contains(lockedScreen) {
+                // Locked screen disconnected - fallback to main
+                print("🖥️ [MULTI-MONITOR] ⚠️ Locked screen disconnected, falling back to main")
+                let fallbackScreen = NSScreen.main ?? NSScreen.screens.first!
+                self?.lockedScreen = fallbackScreen
+                self?.repositionPillIfNeeded(to: fallbackScreen)
+            }
+        }
+    }
+    
     // MARK: - Old School: Key Press = Show, Key Release = Hide
     
     func startRecording() {
@@ -77,6 +158,14 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         
         print("🟡 [SIMPLE-PILL] 📝 SETTINGS CHECK: UK Spelling flag at recording start: \(AppSettings.shared.useUKSpelling)")
         print("🟡 [SIMPLE-PILL] Key pressed - starting recording")
+        
+        // NEW: Lock screen at recording start
+        lockedScreen = getTargetScreen()
+        setupScreenChangeNotification()
+        if let screen = lockedScreen {
+            repositionPillIfNeeded(to: screen)
+            print("🖥️ [MULTI-MONITOR] Screen locked for recording session: \(screen.localizedName)")
+        }
         
         // Capture the recording start time
         recordingStartTime = Date()
@@ -161,7 +250,15 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     private func hidePill() {
         pillWindow?.orderOut(nil)
         pillWindow?.contentView = nil  // Clear the view
+        
+        // NEW: Release screen lock
+        lockedScreen = nil
+        if let observer = screenChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenChangeObserver = nil
+        }
         print("🟡 [SIMPLE-PILL] ✅ Pill hidden (key release)")
+        print("🖥️ [MULTI-MONITOR] Screen lock released")
     }
     
     // NEW: Set feedback state and schedule delayed hide
@@ -497,6 +594,12 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         stopAudioLevelMonitoring()
         testModeTimer?.invalidate()
         feedbackTimer?.invalidate()  // Clean up feedback timer
+        
+        // Clean up multi-monitor observer
+        if let observer = screenChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenChangeObserver = nil
+        }
         
         // Clean up UI
         pillWindow?.orderOut(nil)

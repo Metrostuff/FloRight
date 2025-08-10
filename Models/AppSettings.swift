@@ -18,6 +18,7 @@ class AppSettings: ObservableObject {
     @AppStorage("autoInsertText") var autoInsertText: Bool = true
     @AppStorage("playFeedbackSounds") var playFeedbackSounds: Bool = true
     @AppStorage("useLatchMode") var useLatchMode: Bool = false
+    @AppStorage("screenDetectionMethod") var screenDetectionMethod: String = "automatic"
     
     var selectedTonePreset: TonePreset {
         get { TonePreset(rawValue: selectedTonePresetRaw) ?? .neutral }
