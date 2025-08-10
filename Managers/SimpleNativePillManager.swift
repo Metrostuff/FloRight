@@ -3,9 +3,17 @@ import AppKit
 import AVFoundation
 import Foundation
 
+// MARK: - Feedback State for Recording Outcome
+enum FeedbackState {
+    case success    // "✓ Saved" - Text successfully inserted
+    case clipboard  // "📋 Copied" - Text copied to clipboard (accessibility fallback)
+    case error      // "❌ Try again" - Recording or transcription failed
+}
+
 // MARK: - SIMPLE NATIVE PILL (old school approach)
 class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelegate {
     @Published var recordingState = RecordingState()
+    @Published var feedbackState: FeedbackState? = nil  // NEW: Feedback state for outcome display
     
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
@@ -18,6 +26,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     private var pillWindow: NSWindow?
     private var audioLevelTimer: Timer?
     private var recordingStartTime: Date?  // NEW: Track when recording started
+    private var feedbackTimer: Timer?  // NEW: Timer for feedback display duration
     @Published var currentAudioLevel: Float = 0.0
     @Published var isTranscribing = false
     
@@ -71,6 +80,11 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         
         // Capture the recording start time
         recordingStartTime = Date()
+        
+        // Clear any previous feedback state
+        feedbackTimer?.invalidate()
+        feedbackTimer = nil
+        feedbackState = nil
         
         // MICROPHONE CHECK: Only check microphone upfront (not accessibility)
         if !PermissionManager.shared.isMicrophoneAuthorized() {
@@ -148,6 +162,30 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         pillWindow?.orderOut(nil)
         pillWindow?.contentView = nil  // Clear the view
         print("🟡 [SIMPLE-PILL] ✅ Pill hidden (key release)")
+    }
+    
+    // NEW: Set feedback state and schedule delayed hide
+    private func setFeedbackState(_ state: FeedbackState) {
+        print("🟡 [FEEDBACK] Setting feedback state: \(state)")
+        
+        // Clear any existing feedback timer
+        feedbackTimer?.invalidate()
+        feedbackTimer = nil
+        
+        // Stop transcribing animation and show feedback
+        isTranscribing = false
+        feedbackState = state
+        
+        // Schedule pill hiding after feedback duration
+        feedbackTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.feedbackState = nil
+                self?.hidePill()
+                print("🟡 [FEEDBACK] Feedback complete - pill hidden")
+            }
+        }
+        
+        print("🟡 [FEEDBACK] Feedback timer scheduled for 1.5s")
     }
     
     // MARK: - Audio Recording (same as before)
@@ -298,11 +336,19 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                                 }
                                 print("🟡 [SIMPLE-PILL] 📝 Saved transcription to history with start time")
                                 
-                                // Hide pill after transcription completes
-                                self?.isTranscribing = false
-                                self?.hidePill()
-                                self?.recordingStartTime = nil  // Clean up
-                                print("🟡 [SIMPLE-PILL] ✅ Transcription complete - pill hidden")
+                                // NEW: Show feedback state based on outcome
+                                if success {
+                                    if PermissionManager.shared.isAccessibilityAuthorized() {
+                                        self?.setFeedbackState(.success)  // "✓ Saved"
+                                    } else {
+                                        self?.setFeedbackState(.clipboard)  // "📋 Copied"
+                                    }
+                                } else {
+                                    self?.setFeedbackState(.error)  // "❌ Try again"
+                                }
+                                
+                                // Complete recording state and clear start time
+                                self?.recordingStartTime = nil
                                 
                                 if success {
                                     self?.recordingState.complete()
@@ -342,11 +388,8 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                 DispatchQueue.main.async {
                     print("🟡 [SIMPLE-PILL] ⏱️ Empty recording detected after \(String(format: "%.3f", totalTime))s")
                     
-                    // Hide pill even for empty recordings
-                    self.isTranscribing = false
-                    self.hidePill()
-                    print("🟡 [SIMPLE-PILL] ✅ Empty recording - pill hidden")
-                    
+                    // Show error feedback for empty recordings
+                    self.setFeedbackState(.error)  // "❌ Try again"
                     self.recordingState.error("Empty recording")
                 }
                 // Clean up empty file
@@ -359,11 +402,8 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
             
             print("🟡 [SIMPLE-PILL] File check error after \(String(format: "%.3f", totalTime))s: \(error)")
             DispatchQueue.main.async {
-                // Hide pill on processing errors
-                self.isTranscribing = false
-                self.hidePill()
-                print("🟡 [SIMPLE-PILL] ✅ Processing error - pill hidden")
-                
+                // Show error feedback for processing errors
+                self.setFeedbackState(.error)  // "❌ Try again"
                 self.recordingState.error("File processing failed")
             }
             // Clean up original file on error
@@ -456,6 +496,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         // Stop monitoring
         stopAudioLevelMonitoring()
         testModeTimer?.invalidate()
+        feedbackTimer?.invalidate()  // Clean up feedback timer
         
         // Clean up UI
         pillWindow?.orderOut(nil)
@@ -494,7 +535,8 @@ struct SimplePillView: View {
     private var shouldShowRedSquare: Bool {
         AppSettings.shared.useLatchMode && 
         manager.recordingState.isRecording && 
-        !manager.isTranscribing
+        !manager.isTranscribing &&
+        manager.feedbackState == nil  // Don't show during feedback
     }
     
     var body: some View {
@@ -503,7 +545,25 @@ struct SimplePillView: View {
             Spacer()
             
             HStack(spacing: 6) {
-                if manager.isTranscribing {
+                if let feedbackState = manager.feedbackState {
+                    // NEW: Show feedback state (success/clipboard/error)
+                    HStack(spacing: 8) {
+                        switch feedbackState {
+                        case .success:
+                            Text("✓ Saved")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.green)
+                        case .clipboard:
+                            Text("📋 Copied")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.yellow)
+                        case .error:
+                            Text("❌ Try again")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.red)
+                        }
+                    }
+                } else if manager.isTranscribing {
                     // Show transcribing state with Option 3: Text + 5 animated lines
                     HStack(spacing: 8) {
                         Text("Transcribing")
@@ -582,8 +642,16 @@ struct SimplePillView: View {
                 Capsule()
                     .fill(Color.black.opacity(0.8))
             )
-            .frame(width: manager.isTranscribing ? 160 : 120, height: 40)
-            .animation(.easeInOut(duration: 0.3), value: manager.isTranscribing)
+            .frame(width: {
+                if manager.feedbackState != nil {
+                    return 140  // Feedback states: "✓ Saved", "📋 Copied", "❌ Try again"
+                } else if manager.isTranscribing {
+                    return 160  // "Transcribing" + animated lines
+                } else {
+                    return 120  // Recording audio levels
+                }
+            }(), height: 40)
+            .animation(.easeInOut(duration: 0.3), value: manager.isTranscribing || manager.feedbackState != nil)
             .onTapGesture {
                 // Only handle taps in latch mode when recording (not transcribing)
                 if shouldShowRedSquare {
