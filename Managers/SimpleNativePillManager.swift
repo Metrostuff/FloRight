@@ -15,7 +15,9 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     
     // SIMPLE: Just one window for the pill
     private var pillWindow: NSWindow?
+    private var notificationWindow: NSWindow?  // NEW: Device notification window
     private var audioLevelTimer: Timer?
+    private var notificationTimer: Timer?  // NEW: Auto-hide timer
     private var recordingStartTime: Date?  // NEW: Track when recording started
     @Published var currentAudioLevel: Float = 0.0
     @Published var isTranscribing = false
@@ -98,6 +100,11 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         }
         
         recordingState.startRecording()
+        
+        print("🔍 [DEBUG] About to check device...")
+        // Check for audio device and show notification if first time or changed
+        checkAndNotifyAudioDevice()
+        print("🔍 [DEBUG] Device check completed")
         
         // OLD SCHOOL: Show pill immediately on key press (microphone permission validated)
         showPill()
@@ -417,6 +424,94 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         hidePill()
     }
     
+    // MARK: - Audio Device Notification
+    
+    private func checkAndNotifyAudioDevice() {
+        // Get current audio input device
+        let currentDevice = AVCaptureDevice.default(for: .audio)?.localizedName ?? "Default"
+        
+        // Check previous device
+        let previousDevice = UserDefaults.standard.string(forKey: "FloRightLastAudioDevice")
+        
+        // Show notification if first time or device changed
+        if previousDevice == nil || previousDevice != currentDevice {
+            print("🎤 [DEVICE] Audio device detected: \(currentDevice)")
+            showDeviceNotification(currentDevice)
+            UserDefaults.standard.set(currentDevice, forKey: "FloRightLastAudioDevice")
+        } else {
+            print("🎤 [DEVICE] Same device: \(currentDevice)")
+        }
+    }
+    
+    private func showDeviceNotification(_ deviceName: String) {
+        // Always recreate window with correct size for this device name
+        setupNotificationWindow(for: deviceName)
+        
+        // Create notification view
+        let notificationView = AudioDeviceNotificationView(deviceName: deviceName)
+        
+        notificationWindow?.contentView = NSHostingView(rootView: notificationView)
+        notificationWindow?.orderFront(nil)
+        
+        print("🎤 [NOTIFICATION] Showing device notification: \(deviceName)")
+        
+        // Auto-hide after 3 seconds
+        notificationTimer?.invalidate()
+        notificationTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            self?.hideDeviceNotification()
+        }
+    }
+    
+    private func setupNotificationWindow(for deviceName: String) {
+        guard let screen = NSScreen.main else { return }
+        let screenFrame = screen.frame
+        
+        // Calculate dynamic width based on device name length
+        let fullText = "Using \(deviceName)"
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let textSize = fullText.size(withAttributes: [.font: font])
+        
+        // Calculate total content width: icon + spacing + text + padding
+        let iconWidth: CGFloat = 12 // Icon size
+        let spacingBetweenIconAndText: CGFloat = 8
+        let horizontalPadding: CGFloat = 32 // 16px each side
+        let contentWidth = iconWidth + spacingBetweenIconAndText + textSize.width + horizontalPadding
+        
+        // Set bounds: minimum 200px, maximum 500px for very long device names
+        let notificationWidth = max(200, min(500, contentWidth))
+        let notificationHeight: CGFloat = 50
+        
+        // Position at top-center with dynamic width
+        let notificationX = (screenFrame.width - notificationWidth) / 2
+        let notificationY = screenFrame.height - 80  // 80px from top
+        
+        // Close existing window if any
+        notificationWindow?.close()
+        
+        notificationWindow = NSWindow(
+            contentRect: NSRect(x: notificationX, y: notificationY, width: notificationWidth, height: notificationHeight),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        
+        notificationWindow?.level = .floating
+        notificationWindow?.backgroundColor = .clear
+        notificationWindow?.isOpaque = false
+        notificationWindow?.ignoresMouseEvents = true
+        notificationWindow?.hasShadow = false
+        
+        print("🎤 [NOTIFICATION] Notification window setup complete - width: \(notificationWidth)px for '\(deviceName)'")
+    }
+    
+    private func hideDeviceNotification() {
+        notificationWindow?.orderOut(nil)
+        notificationWindow?.contentView = nil
+        notificationTimer?.invalidate()
+        notificationTimer = nil
+        print("🎤 [NOTIFICATION] Device notification hidden")
+    }
+    
     deinit {
         print("🟡 [SIMPLE-PILL] Deallocating - simple cleanup")
         
@@ -428,6 +523,12 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         // Stop monitoring
         stopAudioLevelMonitoring()
         testModeTimer?.invalidate()
+        
+        // Clean up notification system
+        notificationTimer?.invalidate()
+        notificationWindow?.orderOut(nil)
+        notificationWindow?.close()
+        notificationWindow = nil
         
         // Clean up UI
         pillWindow?.orderOut(nil)
@@ -453,6 +554,29 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         DispatchQueue.main.async {
             self.recordingState.error("Audio encoding failed")
         }
+    }
+}
+
+// MARK: - Audio Device Notification View
+struct AudioDeviceNotificationView: View {
+    let deviceName: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform")
+                .foregroundColor(Color(red: 1.0, green: 1.0, blue: 0.0))
+                .font(.system(size: 12, weight: .medium))
+            
+            Text("Using \(deviceName)")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color(red: 1.0, green: 1.0, blue: 0.0))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            Capsule()
+                .fill(Color.black.opacity(0.8))
+        )
     }
 }
 
