@@ -77,9 +77,7 @@ struct GeneralSettingsView: View {
                     .toggleStyle(.switch)
                     .controlSize(.regular)
                 
-                Toggle("Show recording pill overlay", isOn: $settings.showRecordingPill)
-                    .toggleStyle(.switch)
-                    .controlSize(.regular)
+
                 
                 Toggle("Play feedback sounds", isOn: $settings.playFeedbackSounds)
                     .toggleStyle(.switch)

@@ -14,7 +14,7 @@ class AppSettings: ObservableObject {
     @AppStorage("selectedTonePreset") var selectedTonePresetRaw: String = TonePreset.neutral.rawValue
     @AppStorage("recordingHotkey") var recordingHotkey: String = "rightshift"
     @AppStorage("useUKSpelling") var useUKSpelling: Bool = true
-    @AppStorage("showRecordingPill") var showRecordingPill: Bool = true
+
     @AppStorage("autoInsertText") var autoInsertText: Bool = true
     @AppStorage("playFeedbackSounds") var playFeedbackSounds: Bool = true
     @AppStorage("useLatchMode") var useLatchMode: Bool = false
