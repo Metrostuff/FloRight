@@ -46,9 +46,11 @@ struct MainWindow: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Logo header
                 HStack {
-                    Image(systemName: "text.bubble.fill")
-                        .font(.title2)
-                        .foregroundColor(.primary)
+                    Image("LogoIcon")
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundColor(.black)
+                        .frame(width: 40, height: 40)
                     Text("FloRight")
                         .font(.title3)
                         .fontWeight(.semibold)
@@ -99,7 +101,7 @@ struct MainWindow: View {
                 Spacer()
             }
             .frame(width: 200)
-            .background(Color(hex: "#D9E3F8"))
+            .background(Color(hex: "#CDEEF4"))
             
             Divider()
             
