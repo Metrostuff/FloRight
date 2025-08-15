@@ -64,25 +64,25 @@
       "size" : "128x128"
     },
     {
-      "filename" : "dock_128x128 1.png",
+      "filename" : "dock_256x256 1.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "256x256"
     },
     {
-      "filename" : "dock_128x128@2x 1.png",
+      "filename" : "dock_512x512.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "256x256"
     },
     {
-      "filename" : "dock_256x256.png",
+      "filename" : "dock_512x512 1.png",
       "idiom" : "mac",
       "scale" : "1x",
       "size" : "512x512"
     },
     {
-      "filename" : "dock_256x256@2x.png",
+      "filename" : "Dock Icon.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"

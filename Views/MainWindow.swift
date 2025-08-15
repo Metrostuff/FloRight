@@ -296,6 +296,7 @@ struct HistoryRow: View {
     @State private var isHovered = false  // NEW: Hover state for copy icon
     @State private var isIconHovered = false  // NEW: Specific icon hover state
     @State private var isClicked = false  // NEW: Click animation state
+    @State private var showCopiedNotification = false  // NEW: Notification state
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -319,6 +320,7 @@ struct HistoryRow: View {
                         .onHover { hovering in
                             isIconHovered = hovering
                         }
+                        .help("Copy transcript")  // ✅ PHASE 1: Safe native tooltip
                         .onTapGesture {
                             // Trigger pulsation animation
                             isClicked = true
@@ -327,7 +329,19 @@ struct HistoryRow: View {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(entry.processedText, forType: .string)
                             
-                            // Reset animation after brief delay
+                            // ✅ PHASE 2: Show safe notification
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopiedNotification = true
+                            }
+                            
+                            // Auto-hide notification after 1.5 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showCopiedNotification = false
+                                }
+                            }
+                            
+                            // Reset click animation
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                                 isClicked = false
                             }
@@ -371,6 +385,23 @@ struct HistoryRow: View {
         .onHover { hovering in             // NEW: Hover detection for copy icon
             isHovered = hovering
         }
+        .overlay(
+            // ✅ PHASE 2: Safe overlay notification (no floating windows)
+            Group {
+                if showCopiedNotification {
+                    Text("Transcript copied!")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.8))
+                        .foregroundColor(.white)
+                        .cornerRadius(6)
+                        .transition(.opacity.combined(with: .scale))
+                        .offset(y: -35) // Position above the row
+                }
+            }
+        )
     }
 }
 
