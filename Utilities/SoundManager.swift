@@ -19,7 +19,7 @@ class SoundManager {
     
     private func setupSounds() {
         // Load start sound once
-        if let url = Bundle.main.url(forResource: "UI-sd", withExtension: "wav") {
+        if let url = Bundle.main.url(forResource: "UI-rim", withExtension: "wav") {
             let result = AudioServicesCreateSystemSoundID(url as CFURL, &startSoundID)
             if result == noErr {
                 print("🔊 [SOUND] ✅ Start sound cached (ID: \(startSoundID))")
@@ -27,7 +27,7 @@ class SoundManager {
                 print("🔊 [SOUND] ❌ Failed to cache start sound (error: \(result))")
             }
         } else {
-            print("🔊 [SOUND] ⚠️ UI-sd.wav not found in bundle")
+            print("🔊 [SOUND] ⚠️ UI-rim.wav not found in bundle")
         }
         
         // Load stop sound once
