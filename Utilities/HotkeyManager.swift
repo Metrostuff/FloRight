@@ -11,6 +11,9 @@ class HotkeyManager: ObservableObject {
     private var isShiftPressed = false
     private var isRecordingInLatchMode = false
     
+    // ADD: Centralized sound management
+    private let soundManager = SoundManager()
+    
     // Key code mapping for supported modifier keys
     private let keyCodeMap: [String: Int] = [
         "rightshift": 60,
@@ -145,7 +148,7 @@ class HotkeyManager: ObservableObject {
         
         // Play click sound immediately when hotkey is pressed (before recording starts)
         if AppSettings.shared.playFeedbackSounds {
-            playClickSound()
+            soundManager.playStartSound()
         }
         
         // Update UI state on main thread if needed
@@ -175,7 +178,7 @@ class HotkeyManager: ObservableObject {
         
         // Play notification sound immediately upon hotkey release
         if AppSettings.shared.playFeedbackSounds {
-            playNotificationSound()
+            soundManager.playStopSound()
         }
         
         // CRITICAL: Stop recording without waiting (let it clean up internally)
@@ -203,52 +206,13 @@ class HotkeyManager: ObservableObject {
         
         // Play notification sound (same as hotkey)
         if AppSettings.shared.playFeedbackSounds {
-            playNotificationSound()
+            soundManager.playStopSound()
         }
         
         // Stop recording (same logic as hotkey)
         manager.stopRecording()
         
         print("⌨️ [UI] ✅ Recording stopped from UI - latch mode reset")
-    }
-    
-    private func playClickSound() {
-        // CRITICAL: Non-blocking sound with graceful error handling
-        // If UI-sd.wav is missing, don't break recording functionality
-        guard let soundURL = Bundle.main.url(forResource: "UI-sd", withExtension: "wav") else {
-            print("⌨️ ⚠️ Could not find UI-sd.wav - continuing without start sound")
-            return // Gracefully continue without sound
-        }
-        
-        var soundID: SystemSoundID = 0
-        let createResult = AudioServicesCreateSystemSoundID(soundURL as CFURL, &soundID)
-        
-        if createResult != noErr {
-            print("⌨️ ⚠️ Failed to create UI-sd sound (error: \(createResult)) - continuing without start sound")
-            return // Gracefully continue without sound
-        }
-        
-        AudioServicesPlaySystemSound(soundID)
-        print("⌨️ 🔊 UI-sd sound played on hotkey press")
-    }
-    
-    private func playNotificationSound() {
-        // CRITICAL: Non-blocking sound with graceful error handling
-        guard let soundURL = Bundle.main.url(forResource: "808C", withExtension: "wav") else {
-            print("⌨️ ⚠️ Could not find 808C.wav - continuing without completion sound")
-            return // Gracefully continue without sound
-        }
-        
-        var soundID: SystemSoundID = 0
-        let createResult = AudioServicesCreateSystemSoundID(soundURL as CFURL, &soundID)
-        
-        if createResult != noErr {
-            print("⌨️ ⚠️ Failed to create 808C sound (error: \(createResult)) - continuing without completion sound")
-            return // Gracefully continue without sound
-        }
-        
-        AudioServicesPlaySystemSound(soundID)
-        print("⌨️ 🔊 808C sound played on hotkey release")
     }
     
     // CRITICAL: Simple synchronous cleanup (no Tasks or MainActor)
