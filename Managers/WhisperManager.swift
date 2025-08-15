@@ -19,113 +19,30 @@ class WhisperManager: ObservableObject, @unchecked Sendable {
         }
     }
     
-    // MARK: - Neural Engine Optimization with Progressive Enhancement
-    
-    private func initializeWithTimeout(
-        config: WhisperKitConfig,
-        timeoutSeconds: TimeInterval = 600  // 10 minutes
-    ) async throws -> WhisperKit {
-        
-        // Start progress indicator in background
-        Task {
-            await self.showProgressDuringCompilation()
-        }
-        
-        // Simple timeout approach - try initialization
-        do {
-            let result = try await WhisperKit(config)
-            return result
-        } catch {
-            print("🤖 [WHISPERKIT] ❌ Initialization failed: \(error)")
-            throw error
-        }
-    }
-    
-    private func showProgressDuringCompilation() async {
-        let milestones = [
-            (30, "🧠 Preparing Neural Engine..."),
-            (120, "⚡ Compiling model for your M1 chip..."),
-            (300, "🔧 Optimizing performance (first time only)..."),
-            (480, "⏳ Almost ready...")
-        ]
-        
-        for (seconds, message) in milestones {
-            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            print("🤖 [WHISPERKIT] \(message)")
-        }
-    }
-    
-    private func checkForCompiledNeuralEngineModel() async -> Bool {
-        // Check if Neural Engine model has been compiled before
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        let neuralEngineMarker = documentsPath?.appendingPathComponent(".whisperkit_neural_engine_compiled")
-        let exists = FileManager.default.fileExists(atPath: neuralEngineMarker?.path ?? "")
-        
-        print("🤖 [NEURAL-ENGINE] 🔍 Checking for compiled Neural Engine model...")
-        print("🤖 [NEURAL-ENGINE] 🔍 Marker file path: \(neuralEngineMarker?.path ?? "nil")")
-        print("🤖 [NEURAL-ENGINE] 🔍 Marker exists: \(exists)")
-        
-        return exists
-    }
-    
-    private func markNeuralEngineCompiled() {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        let neuralEngineMarker = documentsPath?.appendingPathComponent(".whisperkit_neural_engine_compiled")
-        
-        do {
-            try "compiled".write(to: neuralEngineMarker!, atomically: true, encoding: .utf8)
-            print("🤖 [NEURAL-ENGINE] ✅ Marked Neural Engine as compiled: \(neuralEngineMarker?.path ?? "nil")")
-        } catch {
-            print("🤖 [NEURAL-ENGINE] ❌ Failed to create marker file: \(error)")
-        }
-    }
+    // MARK: - Simplified Neural Engine Setup
     
     private func setupWhisperKit() async {
-        print("🤖 [WHISPERKIT] 🚀 Initializing WhisperKit...")
+        print("🤖 [WHISPERKIT] 🚀 Initializing WhisperKit with small.en...")
         
         await MainActor.run {
             self.isLoading = true
         }
         
-        // Check if Neural Engine model already compiled
-        let hasPrecompiledNE = await checkForCompiledNeuralEngineModel()
-        
-        if hasPrecompiledNE {
-            print("🤖 [WHISPERKIT] ⚡ Neural Engine model found - loading optimized version...")
+        // Primary: Try small.en with Neural Engine
+        do {
+            print("🤖 [WHISPERKIT] ⚡ Setting up small.en with Neural Engine...")
             
-            // Strategy 1: Use pre-compiled Neural Engine (3-5 seconds)
-            do {
-                let neConfig = WhisperKitConfig(
-                    model: "small.en",
-                    computeOptions: ModelComputeOptions(
+            let primaryConfig = WhisperKitConfig(
+                model: "small.en",
+                computeOptions: ModelComputeOptions(
                     audioEncoderCompute: .cpuAndNeuralEngine,
                     textDecoderCompute: .cpuAndNeuralEngine
-                    ),
-                    verbose: false,
-                    prewarm: true
-                )
-                
-                let kit = try await WhisperKit(neConfig)
-                self.whisperKit = kit
-                
-                await MainActor.run {
-                    self.isInitialized = true
-                    self.isLoading = false
-                }
-                
-                print("🤖 [WHISPERKIT] 🚀 Neural Engine loaded! 3-6x performance boost active.")
-                return
-                
-            } catch {
-                print("🤖 [WHISPERKIT] ⚠️ Pre-compiled Neural Engine failed: \(error)")
-                print("🤖 [WHISPERKIT] 🔄 Falling back to CPU setup...")
-            }
-        }
-        
-        // Strategy 2: Fast CPU setup for immediate use
-        do {
-            print("🤖 [WHISPERKIT] ⚡ Quick setup for immediate use...")
-            let kit = try await WhisperKit()  // CPU-only, ~30 seconds
+                ),
+                verbose: false,
+                prewarm: true
+            )
+            
+            let kit = try await WhisperKit(primaryConfig)
             self.whisperKit = kit
             
             await MainActor.run {
@@ -133,14 +50,37 @@ class WhisperManager: ObservableObject, @unchecked Sendable {
                 self.isLoading = false
             }
             
-            print("🤖 [WHISPERKIT] ✅ Ready to use! Optimizing in background...")
+            print("🤖 [WHISPERKIT] ✅ small.en with Neural Engine ready!")
+            return
             
-            // Background optimization for next launch (only if not already compiled)
-            if !hasPrecompiledNE {
-                Task {
-                    await optimizeForNeuralEngine()
-                }
+        } catch {
+            print("🤖 [WHISPERKIT] ⚠️ small.en Neural Engine failed: \(error)")
+            print("🤖 [WHISPERKIT] 🔄 Attempting CPU fallback...")
+        }
+        
+        // Fallback: Try small.en with CPU only
+        do {
+            print("🤖 [WHISPERKIT] 🔄 Setting up small.en with CPU only...")
+            
+            let fallbackConfig = WhisperKitConfig(
+                model: "small.en",
+                computeOptions: ModelComputeOptions(
+                    audioEncoderCompute: .cpuOnly,
+                    textDecoderCompute: .cpuOnly
+                ),
+                verbose: false,
+                prewarm: true
+            )
+            
+            let kit = try await WhisperKit(fallbackConfig)
+            self.whisperKit = kit
+            
+            await MainActor.run {
+                self.isInitialized = true
+                self.isLoading = false
             }
+            
+            print("🤖 [WHISPERKIT] ✅ small.en with CPU ready!")
             
         } catch {
             print("🤖 [WHISPERKIT] ❌ Setup failed: \(error)")
@@ -152,57 +92,7 @@ class WhisperManager: ObservableObject, @unchecked Sendable {
         }
     }
     
-    private func optimizeForNeuralEngine() async {
-        // This runs in background while user can use the app
-        print("🤖 [NEURAL-ENGINE] 🧠 Background: Starting REAL Neural Engine compilation...")
-        print("🤖 [NEURAL-ENGINE] ℹ️ This should take 5-10 minutes for first-time compilation")
-        
-        let startTime = CFAbsoluteTimeGetCurrent()
-        
-        do {
-            let neConfig = WhisperKitConfig(
-                model: "small.en",
-                computeOptions: ModelComputeOptions(
-                    audioEncoderCompute: .cpuAndNeuralEngine,
-                    textDecoderCompute: .cpuAndNeuralEngine
-                ),
-                verbose: true,  // Enable verbose for debugging
-                prewarm: true
-            )
-            
-            print("🤖 [NEURAL-ENGINE] 🛠️ Config created - starting WhisperKit(neConfig)...")
-            print("🤖 [NEURAL-ENGINE] 🛠️ Model: base.en with Neural Engine compute")
-            
-            // This should take 5-10 minutes but happens in background
-            let _ = try await WhisperKit(neConfig)
-            
-            let endTime = CFAbsoluteTimeGetCurrent()
-            let compilationTime = endTime - startTime
-            
-            print("🤖 [NEURAL-ENGINE] ⏱️ COMPILATION TIME: \(String(format: "%.1f", compilationTime)) seconds")
-            
-            if compilationTime < 60 {
-                print("🤖 [NEURAL-ENGINE] ⚠️ WARNING: Compilation was too fast (\(String(format: "%.1f", compilationTime))s)")
-                print("🤖 [NEURAL-ENGINE] ⚠️ This suggests Neural Engine compilation didn't actually happen")
-                print("🤖 [NEURAL-ENGINE] ⚠️ Expected: 300-600 seconds for first-time compilation")
-            } else {
-                print("🤖 [NEURAL-ENGINE] ✅ Real Neural Engine compilation completed!")
-                // Mark as compiled for future launches
-                markNeuralEngineCompiled()
-            }
-            
-            print("🤖 [NEURAL-ENGINE] 🎉 Neural Engine optimization complete!")
-            print("🤖 [NEURAL-ENGINE] 💡 Restart FloRight for 3-6x faster performance")
-            
-        } catch {
-            let endTime = CFAbsoluteTimeGetCurrent()
-            let failedTime = endTime - startTime
-            
-            print("🤖 [NEURAL-ENGINE] ❌ Background Neural Engine optimization failed after \(String(format: "%.1f", failedTime))s")
-            print("🤖 [NEURAL-ENGINE] ❌ Error: \(error)")
-            print("🤖 [NEURAL-ENGINE] ℹ️ Will retry on next app launch")
-        }
-    }
+
     
     // CORRECT API: Based on actual WhisperKit v0.6.0+ implementation
     func transcribe(audioURL: URL) async -> String {
@@ -287,7 +177,7 @@ class WhisperManager: ObservableObject, @unchecked Sendable {
     // Model information
     var modelInfo: String {
         guard isInitialized else { return "Not initialized" }
-        return "WhisperKit with default model"
+        return "WhisperKit with small.en (optimized accuracy)"
     }
     
     deinit {
@@ -301,6 +191,7 @@ enum WhisperKitError: Error, LocalizedError {
     case notInitialized
     case transcriptionFailed(String)
     case configurationFailed(String)
+    case modelNotFound(String)
     
     var errorDescription: String? {
         switch self {
@@ -310,6 +201,9 @@ enum WhisperKitError: Error, LocalizedError {
             return "Transcription failed: \(message)"
         case .configurationFailed(let message):
             return "Configuration failed: \(message)"
+        case .modelNotFound(let message):
+            return "Model not found: \(message)"
+
         }
     }
 }

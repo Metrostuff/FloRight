@@ -25,7 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: "FloRight")
+            button.image = NSImage(named: "MenuBarIcon")
             button.image?.isTemplate = true
             button.action = #selector(toggleMenu)
             button.target = self

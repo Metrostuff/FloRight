@@ -214,9 +214,9 @@ class HotkeyManager: ObservableObject {
     
     private func playClickSound() {
         // CRITICAL: Non-blocking sound with graceful error handling
-        // If CLICK.mp3 is missing, don't break recording functionality
-        guard let soundURL = Bundle.main.url(forResource: "CLICK", withExtension: "mp3") else {
-            print("⌨️ ⚠️ Could not find CLICK.mp3 - continuing without start sound")
+        // If UI-sd.wav is missing, don't break recording functionality
+        guard let soundURL = Bundle.main.url(forResource: "UI-sd", withExtension: "wav") else {
+            print("⌨️ ⚠️ Could not find UI-sd.wav - continuing without start sound")
             return // Gracefully continue without sound
         }
         
@@ -224,12 +224,12 @@ class HotkeyManager: ObservableObject {
         let createResult = AudioServicesCreateSystemSoundID(soundURL as CFURL, &soundID)
         
         if createResult != noErr {
-            print("⌨️ ⚠️ Failed to create CLICK sound (error: \(createResult)) - continuing without start sound")
+            print("⌨️ ⚠️ Failed to create UI-sd sound (error: \(createResult)) - continuing without start sound")
             return // Gracefully continue without sound
         }
         
         AudioServicesPlaySystemSound(soundID)
-        print("⌨️ 🔊 CLICK sound played on hotkey press")
+        print("⌨️ 🔊 UI-sd sound played on hotkey press")
     }
     
     private func playNotificationSound() {

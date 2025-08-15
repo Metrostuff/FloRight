@@ -523,14 +523,13 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
             
             recorder.updateMeters()
             let averagePower = recorder.averagePower(forChannel: 0)
-            let peakPower = recorder.peakPower(forChannel: 0)
             
             // More sensitive conversion: -60dB to 0dB range
             let normalizedLevel = max(0, min(1, (averagePower + 60) / 60))
             
             // DEBUG: Log audio levels every few cycles
             if Int(Date().timeIntervalSince1970 * 20) % 20 == 0 {
-                print("🟡 [AUDIO] Raw: \(averagePower)dB, Peak: \(peakPower)dB, Normalized: \(normalizedLevel)")
+                // print("🟡 [AUDIO] Raw: \(averagePower)dB, Peak: \(peakPower)dB, Normalized: \(normalizedLevel)")  // Commented out for performance
             }
             
             DispatchQueue.main.async {
@@ -780,7 +779,7 @@ struct SimplePillView: View {
         waveTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
             DispatchQueue.main.async {
                 self.activeIndex = (self.activeIndex + 1) % 8  // Cycle 0,1,2,3,4,5,6,7,0,1,2...
-                print("🔴 [WAVE] activeIndex: \(self.activeIndex)")
+                // print("🔴 [WAVE] activeIndex: \(self.activeIndex)")  // Commented out for performance
             }
         }
         print("🔴 [WAVE] Started wave animation timer")
