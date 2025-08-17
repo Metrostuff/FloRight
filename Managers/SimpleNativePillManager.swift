@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import AVFoundation
 import Foundation
+import Tonalise
 
 // MARK: - Feedback State for Recording Outcome
 enum FeedbackState {
@@ -21,6 +22,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     private let whisperManager = WhisperManager()  // Add Whisper integration
     private let britishSpellingManager = BritishSpellingManager()  // Add British spelling as separate step
     private let audioGainControl = AudioGainControl()  // Add AGC for consistent audio levels
+    private let tonalise: Tonalise
     
     // SIMPLE: Just one window for the pill
     private var pillWindow: NSWindow?
@@ -38,9 +40,25 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     var onStopRequested: (() -> Void)?
     
     override init() {
+        // MUST initialize ALL properties BEFORE super.init() - Swift requirement
+        self.tonalise = Tonalise(
+            useBritishSpelling: AppSettings.shared.useUKSpelling,
+            enableCaching: true
+        )
+        
         super.init()
         print("🟡 [SIMPLE-PILL] Initializing simple native pill")
         setupSimplePill()
+    }
+    
+    private func mapToneToStyle(_ tone: TonePreset) -> Style {
+        switch tone {
+        case .neutral: return .neutral
+        case .professional: return .professional
+        case .friendly: return .friendly
+        case .concise: return .concise
+        case .empathetic: return .empathetic
+        }
     }
     
     // MARK: - Simple Pill Setup
@@ -98,8 +116,10 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     
     private func getCursorScreen() -> NSScreen? {
         let mouseLocation = NSEvent.mouseLocation
+        // FIX: More reliable screen detection using NSMouseInRect
         return NSScreen.screens.first { screen in
-            screen.frame.contains(mouseLocation)
+            // NSMouseInRect handles coordinate system properly
+            NSMouseInRect(mouseLocation, screen.frame, false)
         }
     }
     
@@ -158,6 +178,9 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         
         print("🟡 [SIMPLE-PILL] 📝 SETTINGS CHECK: UK Spelling flag at recording start: \(AppSettings.shared.useUKSpelling)")
         print("🟡 [SIMPLE-PILL] Key pressed - starting recording")
+        
+        // FIX: Clear any stale screen lock first
+        lockedScreen = nil
         
         // NEW: Lock screen at recording start
         lockedScreen = getTargetScreen()
@@ -234,6 +257,14 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
     
     // SIMPLE: Show pill (key press event)
     private func showPill() {
+        // CRITICAL FIX: Verify window is actually valid, not just non-nil
+        if pillWindow == nil || !pillWindow!.isVisible {
+            // FIX: Use CURRENT target screen, not stale lockedScreen
+            let currentScreen = getTargetScreen()
+            setupSimplePill(on: currentScreen)
+            print("🖥️ [MULTI-MONITOR] Recreated pill on current screen: \(currentScreen.localizedName)")
+        }
+        
         // Create the pill view with direct manager reference
         let pillView = SimplePillView(manager: self)
         
@@ -242,7 +273,8 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
         // Enable mouse events for latch mode, disable for press-and-hold mode
         pillWindow?.ignoresMouseEvents = !AppSettings.shared.useLatchMode
         
-        pillWindow?.orderFront(nil)
+        // CRITICAL FIX: Use makeKeyAndOrderFront instead of orderFront
+        pillWindow?.makeKeyAndOrderFront(nil)
         print("🟡 [SIMPLE-PILL] ✅ Pill shown (key press) - mouse events: \(AppSettings.shared.useLatchMode ? "enabled" : "disabled")")
     }
     
@@ -386,11 +418,21 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                     let transcribedText = await whisperManager.transcribe(audioURL: finalURL)
                     print("🟡 [SIMPLE-PILL] 📝 TRACING: WhisperKit transcription complete: \"\(transcribedText.prefix(50))...\"")
                     
-                    // BRITISH SPELLING: Convert to British spelling as separate step (not replacing tone logic)
-                    print("🟡 [SIMPLE-PILL] 📝 SETTINGS CHECK: UK Spelling flag before conversion: \(AppSettings.shared.useUKSpelling)")
-                    print("🟡 [SIMPLE-PILL] 📝 TRACING: Starting British spelling conversion step...")
-                    let britishText = britishSpellingManager.convertToBritishSpelling(transcribedText)
-                    print("🟡 [SIMPLE-PILL] 📝 TRACING: British spelling conversion complete: \"\(britishText.prefix(50))...\"")
+                    // Use Tonalise for BOTH tone transformation AND British spelling
+                    let processedText: String
+                    do {
+                        let style = mapToneToStyle(AppSettings.shared.selectedTonePreset)
+                        processedText = try tonalise.transformSync(
+                            transcribedText,
+                            style: style,
+                            applyBritishSpelling: AppSettings.shared.useUKSpelling
+                        )
+                        print("🟡 [SIMPLE-PILL] 📝 TRACING: Tonalise transformation complete: \"\(processedText.prefix(50))...\"")
+                    } catch {
+                        print("🟡 [SIMPLE-PILL] ⚠️ Tonalise transformation failed: \(error)")
+                        print("🟡 [SIMPLE-PILL] 🔄 Falling back to original text")
+                        processedText = transcribedText  // Safe fallback
+                    }
                     
                     // Clean up files AFTER transcription is complete
                     try? FileManager.default.removeItem(at: url)
@@ -403,7 +445,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                     // Update UI on main thread
                     DispatchQueue.main.async {
                         print("🟡 [SIMPLE-PILL] 📝 TRACING: Sending to TextInsertionManager...")
-                        self.textInsertionManager.insertText(britishText) { [weak self] success, message in
+                        self.textInsertionManager.insertText(processedText) { [weak self] success, message in
                             DispatchQueue.main.async {
                                 // END OVERALL TIMING
                                 let overallEndTime = CFAbsoluteTimeGetCurrent()
@@ -418,7 +460,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                                 if let startTime = self?.recordingStartTime {
                                     TranscriptionHistory.shared.addEntry(
                                         originalText: transcribedText,
-                                        processedText: britishText,
+                                        processedText: processedText,
                                         tone: AppSettings.shared.selectedTonePreset,
                                         targetApp: NSWorkspace.shared.frontmostApplication?.localizedName,
                                         startTime: startTime
@@ -426,7 +468,7 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
                                 } else {
                                     TranscriptionHistory.shared.addEntry(
                                         originalText: transcribedText,
-                                        processedText: britishText,
+                                        processedText: processedText,
                                         tone: AppSettings.shared.selectedTonePreset,
                                         targetApp: NSWorkspace.shared.frontmostApplication?.localizedName
                                     )
@@ -599,6 +641,9 @@ class SimpleNativePillManager: NSObject, ObservableObject, AVAudioRecorderDelega
             NotificationCenter.default.removeObserver(observer)
             screenChangeObserver = nil
         }
+        
+        // FIX: Ensure screen lock is cleared
+        lockedScreen = nil
         
         // Clean up UI
         pillWindow?.orderOut(nil)
